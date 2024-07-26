@@ -5,6 +5,7 @@ from bson.objectid import ObjectId
 app = Flask(__name__)
 client = MongoClient('mongodb://localhost:27017/')
 db = client.bookstore
+books_collection = db['books']
 
 @app.route('/')
 def index():
@@ -43,10 +44,37 @@ def delete_book(id):
     db.books.delete_one({'_id': ObjectId(id)})
     return redirect(url_for('index'))
 
-@app.route('/view')
+@app.route('/view_books', methods=['GET'])
 def view_books():
-    books = db.books.find()
-    return render_template('view_books.html', books=books)
+    search_query = request.args.get('search')
+    page = int(request.args.get('page', 1))
+    per_page = 10
+
+    if search_query:
+        books = books_collection.find({
+            '$or': [
+                {'title': {'$regex': search_query, '$options': 'i'}},
+                {'author': {'$regex': search_query, '$options': 'i'}},
+                {'genre': {'$regex': search_query, '$options': 'i'}},
+                {'year': {'$regex': search_query, '$options': 'i'}}
+            ]
+        }).skip((page - 1) * per_page).limit(per_page)
+        total_books = books_collection.count_documents({
+            '$or': [
+                {'title': {'$regex': search_query, '$options': 'i'}},
+                {'author': {'$regex': search_query, '$options': 'i'}},
+                {'genre': {'$regex': search_query, '$options': 'i'}},
+                {'year': {'$regex': search_query, '$options': 'i'}}
+            ]
+        })
+    else:
+        books = books_collection.find().skip((page - 1) * per_page).limit(per_page)
+        total_books = books_collection.count_documents({})
+
+    total_pages = (total_books + per_page - 1) // per_page
+
+    return render_template('view_books.html', books=books, page=page, total_pages=total_pages)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
